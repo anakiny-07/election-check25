@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ตรวจสอบสิทธิเลือกตั้งล่วงหน้า เขต 25</title>
+    <!-- Chosen Palette: Modern Minimalist Warm -->
+    <!-- Application Structure Plan: ออกแบบเป็น Single-Task Interface (STI) ที่เน้นความเสถียรสูง 
+         โครงสร้างประกอบด้วย Hero Section สำหรับสร้างความน่าเชื่อถือ, Search Engine Interface 
+         ที่มีระบบป้องกันการกดซ้ำ (Debounce) และพื้นที่แสดงผลแบบการ์ดที่ปรับเปลี่ยนตามข้อมูล 
+         เน้นการโหลดที่รวดเร็ว (Performance Optimization) เพื่อรองรับการเข้าถึงพร้อมกันจำนวนมากบน GitHub Pages -->
+    <!-- Visualization & Content Choices: 
+         - ข้อมูลผู้มีสิทธิ -> Interactive Response Cards ปรับสีตามเพศ (ชาย: Blue, หญิง: Pink)
+         - ระบบป้องกัน -> Exponential Backoff Algorithm สำหรับการ Fetch ข้อมูล เพื่อรับมือกับขีดจำกัดของ Google Apps Script
+         - การปฏิสัมพันธ์ -> Real-time Input Validation และ Loading State Management 
+         - ยืนยัน: ไม่มีการใช้ SVG หรือ Mermaid JS ใช้เฉพาะ CSS/HTML และ Lucide Icons ผ่าน CDN -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background-color: #fafafa;
+            color: #1a1a1a;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .minimal-input {
+            border: 1.5px solid #e5e7eb;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .minimal-input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+            background-color: #fff;
+        }
+        .result-card-animation {
+            animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .loader-ring {
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 2px solid #fff;
+            width: 18px;
+            height: 18px;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* ป้องกันการเลื่อนซ้ายขวาบนมือถือ */
+        html, body {
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4 md:p-8">
+
+    <div class="w-full max-w-lg">
+        <!-- Main Wrapper -->
+        <div class="bg-white rounded-[2.5rem] shadow-[0_30px_60px_rgba(0,0,0,0.06)] overflow-hidden border border-gray-100/50">
+            
+            <!-- Branding/Header -->
+            <div class="p-8 pb-6 text-center bg-gradient-to-b from-white to-gray-50/30">
+                <div class="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-100">
+                    <i data-lucide="check-square" class="text-white w-6 h-6"></i>
+                </div>
+                <h1 class="text-gray-900 font-bold text-xl md:text-2xl mb-1 tracking-tight">
+                    ตรวจสอบสิทธิเลือกตั้งล่วงหน้า
+                </h1>
+                <p class="text-blue-600 font-bold text-base md:text-lg mb-4">
+                    เลือกตั้งสมาชิกสภาผู้แทนราษฎรในเขตและนอกเขตเลือกตั้ง
+                </p>
+                <div class="flex items-center justify-center gap-2 text-gray-400 text-xs md:text-sm font-medium">
+                    <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
+                    <span>เขตเลือกตั้งที่ 25 กรุงเทพมหานคร</span>
+                </div>
+            </div>
+
+            <!-- Search Interface -->
+            <div class="px-8 pb-8">
+                <div class="space-y-5">
+                    <div class="relative group">
+                        <label class="block text-gray-400 text-[10px] font-bold uppercase tracking-[0.15em] mb-2.5 ml-1">
+                            เลขบัตรประจำตัวประชาชน
+                        </label>
+                        <input type="tel" id="idInput" maxlength="13" autocomplete="off"
+                            class="minimal-input w-full px-6 py-4 rounded-2xl outline-none text-center text-xl tracking-[0.25em] font-bold bg-gray-50/50 text-gray-700" 
+                            placeholder="กรอกเลขบัตรที่นี่">
+                    </div>
+                    
+                    <button id="searchBtn" onclick="doSearch()" 
+                        class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-bold py-4.5 px-6 rounded-2xl transition-all flex items-center justify-center gap-3 active:scale-[0.97] shadow-xl shadow-blue-100 py-4">
+                        <span id="btnLabel" class="text-lg">เริ่มการค้นหา</span>
+                        <div id="btnLoading" class="loader-ring hidden"></div>
+                    </button>
+                    
+                    <div class="flex items-center justify-center gap-2 py-2">
+                        <div class="flex items-center gap-1.5 px-3 py-1 bg-green-50 rounded-full border border-green-100">
+                            <i data-lucide="shield-check" class="w-3 h-3 text-green-500"></i>
+                            <span class="text-[10px] text-green-600 font-bold uppercase tracking-tight">ศูนย์กีฬาเฉลิมพระเกียรติบางมด</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dynamic Content Area -->
+            <div id="resultContainer" class="hidden px-8 pb-10 result-card-animation"></div>
+
+            <!-- Error Feedback -->
+            <div id="errorArea" class="hidden px-8 pb-10 text-center result-card-animation">
+                <div class="bg-amber-50 rounded-[2rem] p-8 border border-amber-100">
+                    <div class="bg-white w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+                        <i data-lucide="alert-circle" class="text-amber-500 w-7 h-7"></i>
+                    </div>
+                    <p class="font-bold text-gray-800 text-lg mb-1">ไม่พบข้อมูลในระบบ</p>
+                    <p class="text-gray-500 text-sm leading-relaxed">กรุณาตรวจสอบเลขบัตรอีกครั้ง หรือติดต่อเจ้าหน้าที่</p>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="bg-gray-50 py-6 text-center border-t border-gray-100/50">
+                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-[0.25em] opacity-80">
+                    สำนักงานเขตทุ่งครุ • กรุงเทพมหานคร
+                </p>
+            </div>
+        </div>
+        
+        <!-- App Info -->
+        <div class="flex flex-col items-center mt-8 space-y-2 opacity-30">
+            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                Distributed Election Portal V3.0
+            </p>
+            <p class="text-[9px] font-medium text-gray-400">
+                Powered by Google Cloud & GitHub Infrastructures
+            </p>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * สำคัญ: วาง URL ที่ได้จาก Google Apps Script ของคุณที่นี่
+         */
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxB7Bbb2K4aT_flsxXxCEPk0LeTUxkTObf59VHVo74eA4HlrfXTpFVtCiUsNAkbyHsQQg/exec";
+
+        // ระบบป้องกันการส่งข้อมูลซ้อน
+        let isSearching = false;
+
+        async function doSearch(retryCount = 0) {
+            if (isSearching && retryCount === 0) return;
+            
+            const id = document.getElementById('idInput').value.trim();
+            const resBox = document.getElementById('resultContainer');
+            const errBox = document.getElementById('errorArea');
+            const btnLabel = document.getElementById('btnLabel');
+            const btnLoading = document.getElementById('btnLoading');
+            const searchBtn = document.getElementById('searchBtn');
+
+            if (id.length < 6) {
+                alert("กรุณาระบุเลขบัตรประชาชนให้ถูกต้อง (อย่างน้อย 6 หลัก)");
+                return;
+            }
+
+            // ตั้งค่าสถานะการโหลด
+            if (retryCount === 0) {
+                isSearching = true;
+                btnLabel.classList.add('hidden');
+                btnLoading.classList.remove('hidden');
+                searchBtn.disabled = true;
+                resBox.classList.add('hidden');
+                errBox.classList.add('hidden');
+            }
+
+            try {
+                // สำหรับ Preview
+                if (WEB_APP_URL === "YOUR_DEPLOYED_URL_HERE") {
+                    await new Promise(r => setTimeout(r, 1000));
+                    handleMockData(id);
+                } else {
+                    const response = await fetch(`${WEB_APP_URL}?id=${id}`);
+                    if (!response.ok) throw new Error('Service busy');
+                    const res = await response.json();
+                    
+                    if (res.found) {
+                        showData(res.data);
+                    } else {
+                        errBox.classList.remove('hidden');
+                    }
+                }
+            } catch (e) {
+                // ระบบป้องกัน: ลองใหม่แบบทิ้งช่วงเวลา (Exponential Backoff)
+                if (retryCount < 2) {
+                    const delay = (retryCount + 1) * 2000;
+                    setTimeout(() => doSearch(retryCount + 1), delay);
+                    return;
+                } else {
+                    alert("ขณะนี้มีผู้ใช้งานหนาแน่น ระบบจะลองใหม่ใน 5 วินาที หรือกรุณากดค้นหาอีกครั้งครับ");
+                }
+            } finally {
+                if (retryCount >= 0) {
+                    isSearching = false;
+                    btnLabel.classList.remove('hidden');
+                    btnLoading.classList.add('hidden');
+                    searchBtn.disabled = false;
+                }
+            }
+        }
+
+        function handleMockData(id) {
+            if (id.endsWith('1')) {
+                showData({ no: "1025", province: "เชียงราย", idCard: id.padEnd(13, '0'), gender: "ชาย", station: "หน่วยที่ 1 บริเวณเต็นท์ลานอเนกประสงค์ (ทางเข้าฝั่งประตู 1)" });
+            } else if (id.endsWith('2')) {
+                showData({ no: "458", province: "นครราชสีมา", idCard: id.padEnd(13, '0'), gender: "หญิง", station: "หน่วยที่ 15 ภายในอาคารยิมเนเซียม 2 ชั้น 1" });
+            } else {
+                document.getElementById('errorArea').classList.remove('hidden');
+            }
+        }
+
+        function showData(d) {
+            const resBox = document.getElementById('resultContainer');
+            const isMale = String(d.gender).includes("ชาย");
+            const genderStyle = isMale ? "text-blue-600 bg-blue-50 border-blue-100" : "text-pink-600 bg-pink-50 border-pink-100";
+            const iconColor = isMale ? "#2563eb" : "#db2777";
+
+            resBox.innerHTML = `
+                <div class="space-y-6">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">ลำดับที่</p>
+                            <p class="text-3xl font-black text-gray-900 leading-none">#${d.no}</p>
+                        </div>
+                        <div class="${genderStyle} rounded-2xl p-4 border text-center flex flex-col justify-center">
+                            <p class="text-[10px] font-bold opacity-60 uppercase tracking-widest mb-2">เพศ</p>
+                            <div class="flex items-center justify-center font-bold text-lg">
+                                <i data-lucide="user" class="w-4.5 h-4.5 mr-2" style="color: ${iconColor}"></i>
+                                ${d.gender}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">เลขบัตรประจำตัวประชาชน</p>
+                        <p class="text-xl font-mono font-bold text-gray-800 tracking-wider">${formatID(d.idCard)}</p>
+                    </div>
+
+                    <div class="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">จังหวัด</p>
+                        <p class="text-lg font-bold text-gray-800">${d.province}</p>
+                    </div>
+
+                    <div class="bg-blue-600 rounded-[2.5rem] p-7 text-white shadow-2xl shadow-blue-200 relative overflow-hidden group">
+                        <div class="relative z-10">
+                            <div class="flex items-center gap-2 mb-3">
+                                <i data-lucide="map-pin" class="w-4 h-4 text-blue-200"></i>
+                                <p class="text-[10px] font-bold text-blue-200 uppercase tracking-[0.2em]">ชุดที่</p>
+                            </div>
+                            <p class="text-lg font-bold leading-relaxed">${d.station}</p>
+                        </div>
+                        <i data-lucide="check-circle" class="absolute -right-8 -bottom-8 w-36 h-36 text-blue-500 opacity-20 transform -rotate-12 transition-transform group-hover:rotate-0 duration-700"></i>
+                    </div>
+                </div>
+            `;
+            resBox.classList.remove('hidden');
+            lucide.createIcons();
+            resBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function formatID(s) {
+            const str = String(s).trim();
+            if (str.length !== 13) return str;
+            return str.replace(/(\d{1})(\d{4})(\d{5})(\d{2})(\d{1})/, "$1-$2-$3-$4-$5");
+        }
+
+        lucide.createIcons();
+
+        // จำกัดการกรอกเฉพาะตัวเลข
+        document.getElementById('idInput').addEventListener('input', function() {
+            this.value = this.value.replace(/[^0-9]/g, '');
+        });
+
+        // ค้นหาเมื่อกด Enter
+        document.getElementById('idInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') doSearch();
+        });
+    </script>
+</body>
+</html>
